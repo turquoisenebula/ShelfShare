@@ -1,0 +1,89 @@
+// ShelfShare data model
+// A shared reading/watchlist tracker with tag-based recommendations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ItemType {
+  BOOK
+  SHOW
+}
+
+enum ListStatus {
+  WANT
+  IN_PROGRESS
+  DONE
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  username     String     @unique
+  email        String     @unique
+  passwordHash String
+  createdAt    DateTime   @default(now())
+  userItems    UserItem[]
+
+  // Users this person follows, and users who follow them.
+  following Follow[] @relation("follower")
+  followers Follow[] @relation("following")
+}
+
+// A directed follow relationship: follower -> following.
+model Follow {
+  id          String @id @default(cuid())
+  followerId  String
+  followingId String
+
+  follower  User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+}
+
+model Item {
+  id          String     @id @default(cuid())
+  title       String
+  type        ItemType
+  description String
+  coverSeed   String     @default("") // used to derive a deterministic placeholder cover color/pattern
+  createdAt   DateTime   @default(now())
+  tags        ItemTag[]
+  userItems   UserItem[]
+}
+
+model Tag {
+  id    String    @id @default(cuid())
+  name  String    @unique
+  items ItemTag[]
+}
+
+model ItemTag {
+  itemId String
+  tagId  String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, tagId])
+}
+
+// Tracks one user's personal relationship to one item: their status and rating.
+model UserItem {
+  id        String     @id @default(cuid())
+  userId    String
+  itemId    String
+  status    ListStatus @default(WANT)
+  rating    Int? // 1-5, only meaningful once status = DONE
+  updatedAt DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemId])
+}
